@@ -1,4 +1,4 @@
-# AWS-Pipelines: Lambda,S3,SNS
+# AWS-Pipelines: Lambda,S3,CodePipelines,CodeBuild
 
 
 This project is an AWS scenario where i will be using AWS Pipelines to automate the refresh in a lambda function for a script execution when i throw the script into an S3.
