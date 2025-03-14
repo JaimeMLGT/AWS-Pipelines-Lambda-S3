@@ -1,0 +1,22 @@
+[
+{
+  "id": "1",
+  "amount": "200",
+  "category": "licenses"
+},
+{
+  "id": "3",
+  "amount": "75",
+  "category": "videogame-keys"
+},
+{
+  "id": "1",
+  "amount": "15",
+  "category": "licenses"
+},
+{
+  "id": "2",
+  "amount": "40",
+  "category": "video-guides"
+}
+]

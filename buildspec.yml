@@ -1,0 +1,21 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Content from /codebuild/output/"
+      - ls -lah /codebuild/output/
+      - echo "Join inside the path $CODEBUILD_SRC_DIR"
+      - cd $CODEBUILD_SRC_DIR && ls
+
+  build:
+    commands:
+      - echo "Building in Progress"
+
+
+  post_build:
+    commands:
+      - echo "Build succeded!"
+      - exit 0
+
+

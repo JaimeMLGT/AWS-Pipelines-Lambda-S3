@@ -1,0 +1,193 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  ExistingBucket:
+    Type: String
+    Default: "awspipelineuploader"
+  ExistingZip:
+    Type: String
+    Default: "lambdapipelineaws.zip"
+  ExistingScript:
+    Type: String
+    Default: "lambdapipelineaws"
+
+Resources:
+  AWSLambdaBasicExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "AWSLambdaBasicExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "DEV-Lambda-Policies"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "codepipeline:PutJobFailureResult"
+                  - "codepipeline:PutJobSuccessResult"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "s3:GetObject"
+                Resource: !Sub "arn:aws:s3:::${ExistingBucket}/*"
+
+  LambdaPythonFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: "lambdapython"
+      Handler: "lambda_function.lambda_handler"
+      Role: !GetAtt AWSLambdaBasicExecutionRole.Arn
+      Runtime: "python3.8"
+      Code:
+        S3Bucket: !Ref ExistingBucket
+        S3Key: !Ref ExistingZip
+
+
+  CodeBuild:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: "UnitaryCodeBuild"
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: "CODEPIPELINE"
+      Environment:
+        ComputeType: "BUILD_GENERAL1_SMALL"
+        Image: "aws/codebuild/standard:5.0"
+        Type: "LINUX_CONTAINER"
+      Source:
+        Type: "CODEPIPELINE"
+      Description: "CodeBuild"
+
+
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "codepipeline.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "DEV-CodePipeline-Policies"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "codepipeline:StartPipelineExecution"
+                  - "codepipeline:GetPipelineExecution"
+                  - "codepipeline:GetPipelineState"
+                  - "codepipeline:GetPipeline"
+                  - "codepipeline:PutJobFailureResult"
+                  - "codepipeline:PutJobSuccessResult"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "s3:*" 
+                Resource: "arn:aws:s3:::awspipelineuploader" 
+              - Effect: "Allow"
+                Action:
+                  - "s3:*" 
+                Resource: "arn:aws:s3:::awspipelineuploader/*" 
+              - Effect: "Allow"
+                Action:
+                  - "codebuild:StartBuild"
+                  - "codebuild:BatchGetBuilds"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource: "*"
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "codebuild.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "DEV-CodeBuild-Policies"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "s3:GetObject"
+                  - "codebuild:StartBuild"
+                Resource: "*"
+
+
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ExistingBucket
+      Stages:
+        - Name: Download_artifact_from_S3
+          Actions:
+            - Name: S3Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                S3Bucket: !Ref ExistingBucket
+                S3ObjectKey: !Ref ExistingZip
+        - Name: Compile_and_test_the_code_from_the_artifact_downloaded
+          Actions:
+            - Name: CodeBuild
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: UnitaryCodeBuild
+        - Name: Lambda_consumes_the_artifact_downloaded
+          Actions:
+            - Name: LambdaInvoke
+              ActionTypeId:
+                Category: Invoke 
+                Owner: AWS
+                Provider: Lambda
+                Version: 1
+              Configuration:
+                FunctionName: !Ref LambdaPythonFunction
+              InputArtifacts:
+                - Name: SourceOutput
+
+Outputs:
+  LambdaFunctionName:
+    Value: !Ref LambdaPythonFunction
+  PipelineName:
+    Value: !Ref CodePipeline
+  CodeBuildName:
+    Value: !Ref CodeBuild
+
